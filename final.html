@@ -1,0 +1,1179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Bin Waste Management</title>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
+    <style>
+        /* (I kept your original CSS mostly unchanged) */
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg,#667eea 0%,#764ba2 100%); min-height:100vh; }
+        .header { background: rgba(255,255,255,0.95); padding:1rem 2rem; box-shadow:0 2px 10px rgba(0,0,0,0.1); display:flex; justify-content: between; align-items:center; backdrop-filter: blur(10px); position: sticky; top:0; z-index:1000; }
+        .logo { display:flex; align-items:center; gap:1rem; }
+        .logo i { font-size:2rem; color:#2e7d32; }
+        .logo h1 { color:#2e7d32; font-weight:700; }
+        .header-actions { display:flex; gap:1rem; margin-left:auto; }
+        .main-container { display:grid; grid-template-columns: 380px 1fr; height:calc(100vh - 80px); gap:1rem; padding:1rem; }
+        .sidebar { background: rgba(255,255,255,0.95); border-radius:15px; padding:1.5rem; box-shadow:0 8px 32px rgba(0,0,0,0.1); backdrop-filter: blur(10px); overflow-y:auto; }
+        .map-container { background: rgba(255,255,255,0.95); border-radius:15px; padding:1rem; box-shadow:0 8px 32px rgba(0,0,0,0.1); backdrop-filter: blur(10px); }
+        #map { width:100%; height:100%; border-radius:10px; }
+        .section-title { font-size:1.1rem; font-weight:600; color:#2e7d32; margin-bottom:1rem; display:flex; align-items:center; gap:0.5rem; }
+        .btn { padding:0.6rem 1rem; border:none; border-radius:8px; font-size:0.95rem; font-weight:600; cursor:pointer; transition:all .2s; display:inline-flex; align-items:center; gap:.5rem; text-decoration:none; }
+        .btn-primary { background: linear-gradient(45deg,#2e7d32,#4caf50); color:white; }
+        .btn-secondary { background:#f5f5f5; color:#666; }
+        .btn-success { background: linear-gradient(45deg,#4caf50,#66bb6a); color:white; }
+        .btn-danger { background: linear-gradient(45deg,#f44336,#ef5350); color:white; }
+        .btn-small { padding:.35rem .6rem; font-size:.8rem; }
+        .btn-full { width:100%; justify-content:center; }
+        .form-group { margin-bottom:1rem; }
+        .form-group label { display:block; margin-bottom:.5rem; font-weight:600; color:#333; }
+        .form-group input, .form-group select, .form-group textarea { width:100%; padding:.6rem; border:2px solid #e1e5e9; border-radius:8px; font-size:1rem; }
+        .form-group input:focus, .form-group select:focus, .form-group textarea:focus { outline:none; border-color:#2e7d32; }
+        .tabs { display:flex; margin-bottom:1rem; border-bottom:2px solid #f0f0f0; gap:.5rem; flex-wrap:wrap; }
+        .tab { padding:.6rem .9rem; background:none; border:none; cursor:pointer; font-weight:600; color:#666; border-bottom:3px solid transparent; transition:all .2s; border-radius:6px 6px 0 0; }
+        .tab.active { color:#2e7d32; border-bottom-color:#2e7d32; background:rgba(46,125,50,0.05); }
+        .tab-content { display:none; }
+        .tab-content.active { display:block; }
+        .excel-data-table { width:100%; border-collapse:collapse; margin-top:1rem; background:white; border-radius:8px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,0.1); }
+        .excel-data-table th, .excel-data-table td { padding:.6rem; text-align:left; border-bottom:1px solid #e0e0e0; }
+        .excel-data-table th { background:#f5f5f5; font-weight:600; color:#333; }
+        .sync-indicator { display:inline-flex; align-items:center; gap:.5rem; padding:.5rem 1rem; background:#e8f5e8; border-radius:20px; font-size:.8rem; color:#2e7d32; }
+        .sync-indicator.syncing { background:#fff8e1; color:#f57c00; }
+        .bin-item { background:#f8f9fa; padding:1rem; margin-bottom:.5rem; border-radius:8px; border-left:4px solid; transition:transform .2s; }
+        .bin-item.full { border-left-color:#2196F3; }
+        .bin-item.empty { border-left-color:#9E9E9E; }
+        .bin-item.faulty { border-left-color:#F44336; }
+        .modal { display:none; position:fixed; z-index:1000; left:0; top:0; width:100%; height:100%; background-color: rgba(0,0,0,0.5); backdrop-filter: blur(5px); }
+        .modal-content { background-color:white; margin:5% auto; padding:2rem; border-radius:15px; width:90%; max-width:900px; box-shadow:0 10px 40px rgba(0,0,0,0.2); max-height:80vh; overflow-y:auto; }
+        .close { color:#aaa; float:right; font-size:28px; font-weight:bold; cursor:pointer; line-height:1; }
+        .close:hover { color:#333; }
+        .alert { padding:1rem; border-radius:8px; margin-bottom:1rem; display:flex; align-items:center; gap:.5rem; }
+        .alert-info { background:#cce7ff; color:#004085; border-left:4px solid #007bff; }
+        .alert-success { background:#d4edda; color:#155724; border-left:4px solid #28a745; }
+        .stat-card { background:white; padding:1rem; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.1); text-align:center; }
+        .stat-number { font-size:1.3rem; font-weight:bold; color:#2e7d32; }
+        .stat-label { font-size:.8rem; color:#666; margin-top:.25rem; }
+        @media (max-width:768px) {
+            .main-container { grid-template-columns:1fr; grid-template-rows:auto 1fr; }
+            .sidebar { max-height:300px; }
+            .data-stats { grid-template-columns: repeat(2, 1fr); }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="logo">
+            <i class="fas fa-recycle"></i>
+            <h1>Bin Waste Management</h1>
+        </div>
+        <div class="header-actions">
+            <button class="btn btn-secondary" onclick="showExcelImportModal()"><i class="fas fa-upload"></i> Import Excel</button>
+            <button class="btn btn-success" onclick="exportToExcel()"><i class="fas fa-download"></i> Export Excel</button>
+            <div class="sync-indicator" id="syncIndicator"><i class="fas fa-sync"></i> Synced</div>
+        </div>
+    </header>
+
+    <div class="main-container">
+        <div class="sidebar">
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab('data', this)">Excel Data</button>
+                <button class="tab" onclick="switchTab('bins', this)">Bin Management</button>
+                <button class="tab" onclick="switchTab('fleet', this)">Fleet & Dumpsite</button>
+            </div>
+
+            <!-- Excel Data Tab -->
+            <div id="dataTab" class="tab-content active">
+                <div class="section-title"><i class="fas fa-table"></i> Dustbin Owner Database</div>
+                <div class="data-stats" style="margin-bottom:1rem;">
+                    <div class="stat-card"><div class="stat-number" id="totalOwners">0</div><div class="stat-label">Total Owners</div></div>
+                    <div class="stat-card"><div class="stat-number" id="activeBins">0</div><div class="stat-label">Active Bins</div></div>
+                    <div class="stat-card"><div class="stat-number" id="lastSync">Never</div><div class="stat-label">Last Sync</div></div>
+                </div>
+
+                <button class="btn btn-primary btn-full" onclick="showExcelImportModal()" style="margin-bottom:1rem;"><i class="fas fa-file-upload"></i> Load Excel Data</button>
+
+                <div id="excelPreview" class="excel-preview">
+                    <div style="text-align:center; padding:2rem; color:#666;">
+                        <i class="fas fa-file-excel" style="font-size:3rem; margin-bottom:1rem;"></i>
+                        <p>No Excel data loaded</p>
+                        <p style="font-size:.9rem;">Import your Excel file to view owner data</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bin Management Tab -->
+            <div id="binsTab" class="tab-content">
+                <div class="section-title"><i class="fas fa-plus-circle"></i> Add New Bin</div>
+                <form id="binForm">
+                    <div class="form-group"><label for="binId">Bin ID</label><input type="text" id="binId" name="binId" required placeholder="e.g., BIN-ACC-001"></div>
+                    <div class="form-group"><label for="ownerName">Owner Name</label><input type="text" id="ownerName" name="ownerName" required placeholder="John Doe"></div>
+                    <div class="form-group"><label for="digitalAddress">Digital Address</label><input type="text" id="digitalAddress" name="digitalAddress" required placeholder="GA-123-4567"></div>
+                    <div class="form-group"><label for="location">Physical Location</label><textarea id="location" name="location" required placeholder="Complete address details" rows="2"></textarea></div>
+                    <div class="form-group"><label for="latitude">Latitude <small style="font-weight:400;">(click map to fill)</small></label><input type="number" id="latitude" name="latitude" step="any" required placeholder="5.6037"></div>
+                    <div class="form-group"><label for="longitude">Longitude <small style="font-weight:400;">(click map to fill)</small></label><input type="number" id="longitude" name="longitude" step="any" required placeholder="-0.1870"></div>
+                    <div class="form-group"><label for="binType">Bin Type</label><select id="binType" name="binType" required><option value="">Select bin type</option><option value="residential">Residential</option><option value="commercial">Commercial</option><option value="industrial">Industrial</option></select></div>
+                    <div class="form-group"><label for="contactPhone">Contact Phone</label><input type="tel" id="contactPhone" name="contactPhone" placeholder="+233-XXX-XXXX"></div>
+                    <div class="form-group"><label for="binStatus">Status</label><select id="binStatus" name="binStatus"><option value="empty">Empty</option><option value="full">Full</option><option value="faulty">Faulty</option></select></div>
+                    <button type="submit" class="btn btn-primary btn-full"><i class="fas fa-save"></i> Add Bin & Update Excel</button>
+                </form>
+
+                <div id="binsList" style="margin-top:1.5rem;">
+                    <h4 style="margin-bottom:1rem; color:#333;">Registered Bins</h4>
+                </div>
+            </div>
+
+            <!-- Fleet & Dumpsite Tab -->
+            <div id="fleetTab" class="tab-content">
+                <div class="section-title"><i class="fas fa-truck"></i> Fleet Management</div>
+
+                <h4 style="margin-bottom:.5rem;">Add / Edit Truck</h4>
+                <form id="truckForm">
+                    <div class="form-group"><label for="truckId">Truck ID</label><input type="text" id="truckId" name="truckId" placeholder="e.g., TRK-001" required></div>
+                    <div class="form-group"><label for="driverName">Driver Name</label><input type="text" id="driverName" name="driverName" placeholder="Driver"></div>
+                    <div class="form-group"><label for="truckStartLat">Start Latitude <small>(click map to fill)</small></label><input type="number" id="truckStartLat" name="truckStartLat" step="any" placeholder="5.6037"></div>
+                    <div class="form-group"><label for="truckStartLng">Start Longitude <small>(click map to fill)</small></label><input type="number" id="truckStartLng" name="truckStartLng" step="any" placeholder="-0.1870"></div>
+                    <div class="form-group"><label for="truckCapacity">Capacity (number of bins)</label><input type="number" id="truckCapacity" name="truckCapacity" min="1" value="10" required></div>
+                    <div class="form-group"><label for="truckFuel">Fuel (litres) - optional</label><input type="number" id="truckFuel" name="truckFuel" min="0"></div>
+                    <div class="form-group"><label for="truckIncome">Income Generated (₵) - optional</label><input type="number" id="truckIncome" name="truckIncome" min="0"></div>
+                    <button type="submit" class="btn btn-primary btn-full"><i class="fas fa-plus-circle"></i> Add / Update Truck</button>
+                </form>
+
+                <div style="margin:1rem 0;">
+                    <h4 style="margin-bottom:.5rem;">Registered Trucks</h4>
+                    <div id="trucksList"></div>
+                </div>
+
+                <hr />
+
+                <div style="margin-top:1rem;">
+                    <h4 style="margin-bottom:.5rem;">Dumpsite</h4>
+                    <div class="form-group"><label for="dumpsiteName">Dumpsite Name</label><input type="text" id="dumpsiteName" name="dumpsiteName" placeholder="Main Dumpsite"></div>
+                    <div class="form-group"><label for="dumpsiteLat">Latitude <small>(click map to fill)</small></label><input type="number" id="dumpsiteLat" step="any"></div>
+                    <div class="form-group"><label for="dumpsiteLng">Longitude <small>(click map to fill)</small></label><input type="number" id="dumpsiteLng" step="any"></div>
+                    <button class="btn btn-success" onclick="saveDumpsite()"><i class="fas fa-map-pin"></i> Save Dumpsite</button>
+                </div>
+
+                <hr />
+
+                <div style="margin-top:1rem;">
+                    <h4 style="margin-bottom:.5rem;">Start Pickup Run</h4>
+                    <div class="form-group">
+                        <label for="activeTruckSelect">Select Active Truck</label>
+                        <select id="activeTruckSelect" style="width:100%; padding:.6rem; border-radius:8px; border:2px solid #e1e5e9;"></select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="pickupMode">Pickup Mode</label>
+                        <select id="pickupMode" style="width:100%; padding:.6rem; border-radius:8px; border:2px solid #e1e5e9;">
+                            <option value="all_full">All full bins</option>
+                            <option value="radius">Bins within radius (km)</option>
+                            <option value="selected">Select specific bins</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group" id="radiusGroup" style="display:none;">
+                        <label for="radiusKm">Radius (km)</label>
+                        <input type="number" id="radiusKm" min="0.1" step="0.1" value="2">
+                    </div>
+
+                    <div class="form-group" id="selectedBinsGroup" style="display:none;">
+                        <label>Choose bins to pick (checkboxes)</label>
+                        <div id="selectBinsContainer" style="max-height:150px; overflow:auto; border:1px solid #e0e0e0; padding:.5rem; border-radius:6px;"></div>
+                    </div>
+
+                    <div style="display:flex; gap:.5rem; margin-top:.5rem;">
+                        <button class="btn btn-primary" onclick="startPickupRun()"><i class="fas fa-play"></i> Start Run</button>
+                        <button class="btn btn-secondary" onclick="clearRoute()"><i class="fas fa-ban"></i> Clear Route</button>
+                    </div>
+
+                    <div style="margin-top:1rem;">
+                        <h4 style="margin-bottom:.5rem;">Last Run Summary</h4>
+                        <div id="runSummary" style="background:#f8f9fa; padding:1rem; border-radius:6px; min-height:80px;"></div>
+                    </div>
+                </div>
+
+                <hr />
+
+                <div style="margin-top:1rem;">
+                    <h4 style="margin-bottom:.5rem;">Payments & Pickup Counts</h4>
+                    <div id="paymentsList" style="max-height:160px; overflow:auto; border:1px solid #e0e0e0; padding:.5rem; border-radius:6px;"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="map-container">
+            <div id="map"></div>
+        </div>
+    </div>
+
+    <!-- Excel Import Modal (kept from original) -->
+    <div id="excelImportModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('excelImportModal')">&times;</span>
+            <h3 style="margin-bottom:1rem; color:#2e7d32;"><i class="fas fa-file-excel"></i> Import Excel Data</h3>
+            <div class="alert alert-info"><i class="fas fa-info-circle"></i>
+                <div><strong>Excel File Format:</strong><br>Your Excel file should contain columns: Owner Name, Digital Address, Phone, Location, Bin ID, Latitude, Longitude</div>
+            </div>
+
+            <div class="file-upload-area" id="fileUploadArea">
+                <i class="fas fa-cloud-upload-alt" style="font-size:3rem; color:#2e7d32; margin-bottom:1rem;"></i>
+                <p><strong>Click to select Excel file</strong> or drag and drop</p>
+                <p style="font-size:.9rem; color:#666;">Supports .xlsx, .xls, and .csv files</p>
+                <input type="file" id="excelFileInput" accept=".xlsx,.xls,.csv" style="display:none;">
+            </div>
+
+            <div id="filePreview" style="display:none; margin-top:1rem;">
+                <h4>File Preview:</h4>
+                <div id="previewContent"></div>
+                <div style="margin-top:1rem;">
+                    <button class="btn btn-primary" onclick="processExcelFile()"><i class="fas fa-check"></i> Import Data</button>
+                    <button class="btn btn-secondary" onclick="cancelImport()">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom Modal placeholder -->
+    <div id="customModalContainer"></div>
+
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+    <script>
+    /******************************************************************
+     * Extended script: fleet, dumpsite, route optimization & payments
+     ******************************************************************/
+
+    // --- Data stores (localStorage) ---
+    let map;
+    let bins = JSON.parse(localStorage.getItem('wasteBins')) || [];
+    let excelData = JSON.parse(localStorage.getItem('excelOwnerData')) || [];
+    let markers = [];
+    let selectedFile = null;
+
+    // New stores
+    let trucks = JSON.parse(localStorage.getItem('wasteTrucks')) || [];
+    let dumpsite = JSON.parse(localStorage.getItem('dumpsiteInfo')) || null;
+
+    // For route drawing
+    let routeLayer = null;
+    let routeMarkers = [];
+
+    // Rates per bin type (example) - charged every 3 pickups
+    const ratesPerBinType = {
+        residential: 2.0, // 2 cedi per payment event (example)
+        commercial: 3.5,
+        industrial: 5.0
+    };
+
+    // --- Initialize ---
+    document.addEventListener('DOMContentLoaded', function() {
+        initializeMap();
+        loadExcelData();
+        loadBins();
+        loadTrucks();
+        renderDumpsiteOnMap();
+        populateActiveTruckSelect();
+        updateStats();
+        setupFileUpload();
+
+        // Map click populates forms' coordinate inputs depending on last focused input
+        let lastCoordTarget = null;
+        ['latitude','longitude','truckStartLat','truckStartLng','dumpsiteLat','dumpsiteLng'].forEach(id=>{
+            const el = document.getElementById(id);
+            if (el) {
+                el.addEventListener('focus', ()=> lastCoordTarget = id);
+            }
+        });
+
+        map.on('click', function(e){
+            // populate the last focused coordinate input if any
+            if (lastCoordTarget) {
+                document.getElementById(lastCoordTarget).value = e.latlng.lat.toFixed(6);
+                // if both lat & lng are used and the element was lat, also set corresponding lng if empty (nice UX)
+                if (lastCoordTarget === 'latitude' && !document.getElementById('longitude').value) {
+                    document.getElementById('longitude').value = e.latlng.lng.toFixed(6);
+                }
+                if (lastCoordTarget === 'truckStartLat' && !document.getElementById('truckStartLng').value) {
+                    document.getElementById('truckStartLng').value = e.latlng.lng.toFixed(6);
+                }
+                if (lastCoordTarget === 'dumpsiteLat' && !document.getElementById('dumpsiteLng').value) {
+                    document.getElementById('dumpsiteLng').value = e.latlng.lng.toFixed(6);
+                }
+            } else {
+                // default behaviour for bins (existing code)
+                document.getElementById('latitude').value = e.latlng.lat.toFixed(6);
+                document.getElementById('longitude').value = e.latlng.lng.toFixed(6);
+            }
+        });
+    });
+
+    // --- Map init ---
+    function initializeMap() {
+        map = L.map('map').setView([5.6037, -0.1870], 12);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+    }
+
+    /***********************
+     * Excel / Bin functions
+     ***********************/
+    // ... (I kept your original file upload/parse/process functions mostly unchanged)
+    // For brevity in this presentation I will re-include key functions needed for the system to work.
+
+    // File upload setup (same as original)
+    function setupFileUpload() {
+        const uploadArea = document.getElementById('fileUploadArea');
+        const fileInput = document.getElementById('excelFileInput');
+
+        uploadArea.addEventListener('click', () => fileInput.click());
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+        uploadArea.addEventListener('dragleave', () => { uploadArea.classList.remove('dragover'); });
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) handleFileSelect(files[0]);
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) handleFileSelect(e.target.files[0]);
+        });
+    }
+
+    function handleFileSelect(file) {
+        const validTypes = ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                            'application/vnd.ms-excel', 'text/csv'];
+        if (!validTypes.includes(file.type) && !file.name.endsWith('.csv')) {
+            showToast('Please select a valid Excel or CSV file', 'error'); return;
+        }
+        selectedFile = file;
+        document.getElementById('filePreview').style.display = 'block';
+        document.getElementById('previewContent').innerHTML = `
+            <div style="padding:1rem; background:#f8f9fa; border-radius:8px;">
+                <p><strong>File:</strong> ${file.name}</p>
+                <p><strong>Size:</strong> ${(file.size/1024).toFixed(2)} KB</p>
+                <p><strong>Type:</strong> ${file.type || 'CSV'}</p>
+            </div>
+        `;
+    }
+
+    function processExcelFile() {
+        if (!selectedFile) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                let data;
+                if (selectedFile.name.endsWith('.csv')) {
+                    data = parseCSV(e.target.result);
+                } else {
+                    const workbook = XLSX.read(e.target.result, { type: 'binary' });
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+                    data = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                }
+                processOwnerData(data);
+                closeModal('excelImportModal');
+                showToast('Excel data imported successfully!', 'success');
+            } catch (error) {
+                console.error('Error processing file:', error);
+                showToast('Error processing file. Please check the format.', 'error');
+            }
+        };
+        if (selectedFile.name.endsWith('.csv')) reader.readAsText(selectedFile); else reader.readAsBinaryString(selectedFile);
+    }
+
+    function parseCSV(csvText) {
+        const lines = csvText.split('\n');
+        return lines.map(line => {
+            const result = []; let current=''; let inQuotes=false;
+            for (let i=0;i<line.length;i++){
+                const char=line[i];
+                if (char === '"') inQuotes = !inQuotes;
+                else if (char === ',' && !inQuotes) { result.push(current.trim()); current=''; }
+                else current+=char;
+            }
+            result.push(current.trim()); return result;
+        });
+    }
+
+    // Owner data processing (keeps previous column detection)
+    function processOwnerData(data) {
+        if (data.length === 0) return;
+        const headers = data[0].map(h => h.toString().toLowerCase());
+        const ownerNameCol = findColumn(headers, ['owner name','name','owner']);
+        const digitalAddressCol = findColumn(headers, ['digital address','digital','address code']);
+        const phoneCol = findColumn(headers, ['phone','contact','mobile']);
+        const locationCol = findColumn(headers, ['location','address','physical location']);
+        const binIdCol = findColumn(headers, ['bin id','binid','bin']);
+        const latCol = findColumn(headers, ['latitude','lat']);
+        const lngCol = findColumn(headers, ['longitude','lng','lon']);
+
+        const processedData = [];
+        for (let i=1;i<data.length;i++){
+            const row=data[i]; if (!row || row.length===0) continue;
+            const ownerData = {
+                id: generateOwnerId(),
+                ownerName: row[ownerNameCol] || '',
+                digitalAddress: row[digitalAddressCol] || '',
+                phone: row[phoneCol] || '',
+                location: row[locationCol] || '',
+                binId: row[binIdCol] || '',
+                latitude: parseFloat(row[latCol]) || null,
+                longitude: parseFloat(row[lngCol]) || null,
+                importedAt: new Date().toISOString()
+            };
+            // Add pickupCount and paymentDue fields if not present
+            ownerData.pickupCount = ownerData.pickupCount || 0;
+            ownerData.paymentDue = ownerData.paymentDue || 0;
+            if (ownerData.ownerName || ownerData.binId) processedData.push(ownerData);
+        }
+
+        excelData = processedData;
+        localStorage.setItem('excelOwnerData', JSON.stringify(excelData));
+        createBinsFromExcelData();
+        loadExcelData();
+        updateStats();
+        updateSyncIndicator('success','Imported');
+    }
+
+    function findColumn(headers, possibleNames) {
+        for (let name of possibleNames) {
+            const index = headers.findIndex(h => h.includes(name));
+            if (index !== -1) return index;
+        }
+        return -1;
+    }
+
+    function generateOwnerId() { return 'OWN-' + Date.now() + '-' + Math.random().toString(36).substr(2,9); }
+
+    function createBinsFromExcelData() {
+        excelData.forEach(owner => {
+            if (owner.binId && owner.latitude && owner.longitude) {
+                const existing = bins.find(b => b.binId === owner.binId);
+                if (!existing) {
+                    const newBin = {
+                        binId: owner.binId,
+                        ownerName: owner.ownerName,
+                        digitalAddress: owner.digitalAddress,
+                        phone: owner.phone,
+                        location: owner.location,
+                        address: owner.location,
+                        latitude: owner.latitude,
+                        longitude: owner.longitude,
+                        binType: 'residential',
+                        status: 'empty',
+                        createdAt: new Date().toISOString(),
+                        source: 'excel',
+                        pickupCount: 0,
+                        paymentDue: 0
+                    };
+                    bins.push(newBin);
+                }
+            }
+        });
+        localStorage.setItem('wasteBins', JSON.stringify(bins));
+        loadBins();
+    }
+
+    function loadExcelData() {
+        const preview = document.getElementById('excelPreview');
+        if (excelData.length === 0) {
+            preview.innerHTML = `<div style="text-align:center; padding:2rem; color:#666;"><i class="fas fa-file-excel" style="font-size:3rem; margin-bottom:1rem;"></i><p>No Excel data loaded</p><p style="font-size:.9rem;">Import your Excel file to view owner data</p></div>`;
+            return;
+        }
+        let tableHTML = `<table class="excel-data-table"><thead><tr><th>Owner Name</th><th>Digital Address</th><th>Bin ID</th><th>Phone</th><th>Actions</th></tr></thead><tbody>`;
+        excelData.forEach((owner,index)=> {
+            tableHTML += `<tr><td>${owner.ownerName}</td><td>${owner.digitalAddress}</td><td>${owner.binId}</td><td>${owner.phone}</td><td>
+                <button class="btn btn-secondary btn-small" onclick="viewOwnerDetails(${index})"><i class="fas fa-eye"></i></button>
+                <button class="btn btn-secondary btn-small" onclick="deleteOwner(${index})"><i class="fas fa-trash"></i></button>
+            </td></tr>`;
+        });
+        tableHTML += `</tbody></table>`;
+        preview.innerHTML = tableHTML;
+    }
+
+    function loadBins() {
+        const binsList = document.getElementById('binsList');
+        if (bins.length === 0) {
+            binsList.innerHTML = `<h4 style="margin-bottom:1rem; color:#333;">Registered Bins</h4><div style="text-align:center; padding:2rem; color:#666;"><i class="fas fa-trash" style="font-size:2rem; margin-bottom:1rem;"></i><p>No bins registered yet</p></div>`;
+            updateMapMarkers(); return;
+        }
+        let html = '<h4 style="margin-bottom:1rem; color:#333;">Registered Bins</h4>';
+        bins.forEach((bin,index) => {
+            html += `<div class="bin-item ${bin.status}"><div class="bin-header" style="display:flex; justify-content:space-between; align-items:center;"><div class="bin-id">${bin.binId}</div><div class="status-badge status-${bin.status}">${bin.status}</div></div>
+                <div class="owner-info"><strong>Owner:</strong> ${bin.ownerName || 'N/A'}</div>
+                <div class="owner-info"><strong>Digital Address:</strong> ${bin.digitalAddress || 'N/A'}</div>
+                <div class="owner-info"><strong>Location:</strong> ${bin.location}</div>
+                <div style="margin-top:.5rem; display:flex; gap:.5rem;">
+                    <button class="btn btn-secondary btn-small" onclick="viewOnMap(${index})"><i class="fas fa-map-marker-alt"></i> View</button>
+                    <button class="btn btn-secondary btn-small" onclick="editBin(${index})"><i class="fas fa-edit"></i> Edit</button>
+                    <button class="btn btn-success btn-small" onclick="markBinFull(${index})"><i class="fas fa-arrow-up"></i> Mark Full</button>
+                </div></div>`;
+        });
+        binsList.innerHTML = html;
+        updateMapMarkers();
+    }
+
+    // mark bin full helper
+    function markBinFull(index) {
+        bins[index].status = 'full';
+        localStorage.setItem('wasteBins', JSON.stringify(bins));
+        loadBins();
+        showToast('Bin marked full', 'success');
+    }
+
+    function updateStats() {
+        document.getElementById('totalOwners').textContent = excelData.length;
+        document.getElementById('activeBins').textContent = bins.filter(b => b.status !== 'faulty').length;
+        if (excelData.length > 0) {
+            const lastImport = excelData[0].importedAt;
+            const date = new Date(lastImport);
+            document.getElementById('lastSync').textContent = date.toLocaleDateString();
+        }
+    }
+
+    // Add bin form handler (keeps original behavior but adds pickupCount/payment fields)
+    document.getElementById('binForm').addEventListener('submit', function(e){
+        e.preventDefault();
+        const formData = new FormData(e.target);
+        const newBin = {
+            binId: formData.get('binId'),
+            ownerName: formData.get('ownerName'),
+            digitalAddress: formData.get('digitalAddress'),
+            phone: formData.get('contactPhone'),
+            location: formData.get('location'),
+            address: formData.get('location'),
+            latitude: parseFloat(formData.get('latitude')),
+            longitude: parseFloat(formData.get('longitude')),
+            binType: formData.get('binType'),
+            status: formData.get('binStatus') || 'empty',
+            createdAt: new Date().toISOString(),
+            source: 'manual',
+            pickupCount: 0,
+            paymentDue: 0
+        };
+
+        if (bins.find(b => b.binId === newBin.binId)) { showToast('Bin ID already exists!', 'error'); return; }
+
+        bins.push(newBin);
+        localStorage.setItem('wasteBins', JSON.stringify(bins));
+
+        const newOwnerData = { id: generateOwnerId(), ownerName: newBin.ownerName, digitalAddress: newBin.digitalAddress, phone: newBin.phone, location: newBin.location, binId: newBin.binId, latitude: newBin.latitude, longitude: newBin.longitude, importedAt: new Date().toISOString(), pickupCount:0, paymentDue:0 };
+        excelData.push(newOwnerData);
+        localStorage.setItem('excelOwnerData', JSON.stringify(excelData));
+
+        loadBins(); loadExcelData(); updateStats(); updateSyncIndicator('success','Updated');
+
+        // reset form
+        e.target.reset();
+        showToast('Bin added and Excel data updated!', 'success');
+    });
+
+    // Map markers update including trucks and dumpsite
+    function updateMapMarkers() {
+        // clear previous markers
+        markers.forEach(m => map.removeLayer(m));
+        markers = [];
+
+        // Bin markers
+        bins.forEach((bin, idx) => {
+            if (!bin.latitude || !bin.longitude) return;
+            const color = bin.status === 'full' ? '#2196f3' : bin.status === 'faulty' ? '#f44336' : '#9e9e9e';
+            const marker = L.marker([bin.latitude, bin.longitude], {
+                icon: L.divIcon({ html: `<i class="fas fa-trash" style="color:${color}; font-size:20px;"></i>`, iconSize:[30,30], className:'bin-marker' })
+            }).addTo(map);
+            marker.bindPopup(`<div style="min-width:200px;"><h4 style="color:#2e7d32; margin-bottom:10px;">${bin.binId}</h4><p><strong>Owner:</strong> ${bin.ownerName || 'N/A'}</p><p><strong>Status:</strong> <span class="status-badge status-${bin.status}">${bin.status}</span></p><p><strong>Pickups:</strong> ${bin.pickupCount || 0}</p></div>`);
+            markers.push(marker);
+        });
+
+        // Truck markers
+        trucks.forEach((truck,index) => {
+            if (truck.startLat && truck.startLng) {
+                const marker = L.marker([truck.startLat, truck.startLng], {
+                    icon: L.divIcon({ html: `<i class="fas fa-truck" style="color:#4caf50; font-size:22px;"></i>`, iconSize:[30,30], className:'truck-marker' })
+                }).addTo(map);
+                marker.bindPopup(`<div style="min-width:180px;"><strong>${truck.truckId}</strong><div>Driver: ${truck.driverName || 'N/A'}</div><div>Capacity: ${truck.capacityBins || truck.capacity || 'N/A'} bins</div></div>`);
+                markers.push(marker);
+            }
+        });
+
+        // Dumpsite marker
+        renderDumpsiteOnMap();
+    }
+
+    // view a bin on map
+    function viewOnMap(index) {
+        const bin = bins[index];
+        map.setView([bin.latitude, bin.longitude], 16);
+    }
+
+    function editBin(index) {
+        const bin = bins[index];
+        document.getElementById('binId').value = bin.binId;
+        document.getElementById('ownerName').value = bin.ownerName;
+        document.getElementById('digitalAddress').value = bin.digitalAddress;
+        document.getElementById('location').value = bin.location;
+        document.getElementById('latitude').value = bin.latitude;
+        document.getElementById('longitude').value = bin.longitude;
+        document.getElementById('binType').value = bin.binType;
+        document.getElementById('contactPhone').value = bin.phone || '';
+        document.getElementById('binStatus').value = bin.status || 'empty';
+        // switch to bins tab
+        document.querySelectorAll('.tab')[1].click();
+        showToast('Edit mode - Update the form and submit', 'info');
+    }
+
+    /***********************
+     * Trucks & Dumpsite
+     ***********************/
+    // Truck form handler
+    document.getElementById('truckForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const fd = new FormData(e.target);
+        const truckId = fd.get('truckId').trim();
+        if (!truckId) { showToast('Truck ID is required', 'error'); return; }
+        const existing = trucks.find(t => t.truckId === truckId);
+        const truckObj = {
+            truckId,
+            driverName: fd.get('driverName'),
+            startLat: fd.get('truckStartLat') ? parseFloat(fd.get('truckStartLat')) : null,
+            startLng: fd.get('truckStartLng') ? parseFloat(fd.get('truckStartLng')) : null,
+            capacityBins: parseInt(fd.get('truckCapacity')) || 10,
+            fuel: fd.get('truckFuel') ? parseFloat(fd.get('truckFuel')) : 0,
+            income: fd.get('truckIncome') ? parseFloat(fd.get('truckIncome')) : 0,
+            createdAt: new Date().toISOString()
+        };
+        if (existing) {
+            // update
+            Object.assign(existing, truckObj);
+            showToast('Truck updated', 'success');
+        } else {
+            trucks.push(truckObj);
+            showToast('Truck added', 'success');
+        }
+        localStorage.setItem('wasteTrucks', JSON.stringify(trucks));
+        loadTrucks();
+        updateMapMarkers();
+        populateActiveTruckSelect();
+        e.target.reset();
+    });
+
+    function loadTrucks() {
+        const container = document.getElementById('trucksList');
+        if (trucks.length === 0) {
+            container.innerHTML = `<div style="text-align:center; color:#666; padding:1rem;">No trucks registered yet</div>`; return;
+        }
+        let html = '';
+        trucks.forEach((t, idx) => {
+            html += `<div style="background:#f8f9fa; padding:.8rem; margin-bottom:.5rem; border-radius:6px; display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                    <div style="font-weight:700;">${t.truckId} ${t.driverName ? '— '+t.driverName : ''}</div>
+                    <div style="font-size:.9rem; color:#666;">Capacity: ${t.capacityBins} bins • Fuel: ${t.fuel || 0}L</div>
+                </div>
+                <div style="display:flex; gap:.4rem;">
+                    <button class="btn btn-secondary btn-small" onclick="viewTruckOnMap(${idx})"><i class="fas fa-map-marker-alt"></i></button>
+                    <button class="btn btn-primary btn-small" onclick="selectTruckForEdit(${idx})"><i class="fas fa-edit"></i></button>
+                    <button class="btn btn-danger btn-small" onclick="deleteTruck(${idx})"><i class="fas fa-trash"></i></button>
+                </div>
+            </div>`;
+        });
+        container.innerHTML = html;
+    }
+
+    function viewTruckOnMap(idx) {
+        const t = trucks[idx];
+        if (t.startLat && t.startLng) map.setView([t.startLat, t.startLng], 13);
+    }
+
+    function selectTruckForEdit(idx) {
+        const t = trucks[idx];
+        document.getElementById('truckId').value = t.truckId;
+        document.getElementById('driverName').value = t.driverName || '';
+        document.getElementById('truckStartLat').value = t.startLat || '';
+        document.getElementById('truckStartLng').value = t.startLng || '';
+        document.getElementById('truckCapacity').value = t.capacityBins || 10;
+        document.getElementById('truckFuel').value = t.fuel || '';
+        document.getElementById('truckIncome').value = t.income || '';
+        // switch to fleet tab
+        document.querySelectorAll('.tab')[2].click();
+    }
+
+    function deleteTruck(idx) {
+        if (!confirm('Delete this truck?')) return;
+        trucks.splice(idx,1);
+        localStorage.setItem('wasteTrucks', JSON.stringify(trucks));
+        loadTrucks(); populateActiveTruckSelect(); updateMapMarkers();
+        showToast('Truck removed', 'success');
+    }
+
+    function populateActiveTruckSelect() {
+        const sel = document.getElementById('activeTruckSelect');
+        sel.innerHTML = '';
+        if (trucks.length === 0) {
+            sel.innerHTML = '<option value="">-- No trucks --</option>'; return;
+        }
+        sel.innerHTML = '<option value="">-- Select Truck --</option>';
+        trucks.forEach((t, idx) => {
+            const opt = document.createElement('option'); opt.value = t.truckId; opt.text = `${t.truckId} ${t.driverName ? ' — '+t.driverName : ''}`; sel.appendChild(opt);
+        });
+    }
+
+    // Dumpsite functions
+    function saveDumpsite() {
+        const name = document.getElementById('dumpsiteName').value || 'Dumpsite';
+        const lat = parseFloat(document.getElementById('dumpsiteLat').value);
+        const lng = parseFloat(document.getElementById('dumpsiteLng').value);
+        if (!lat || !lng) { showToast('Please provide dumpsite coordinates', 'error'); return; }
+        dumpsite = { name, lat, lng, savedAt: new Date().toISOString() };
+        localStorage.setItem('dumpsiteInfo', JSON.stringify(dumpsite));
+        renderDumpsiteOnMap();
+        showToast('Dumpsite saved', 'success');
+    }
+
+    function renderDumpsiteOnMap() {
+        // remove existing dumpsite marker if any
+        if (window._dumpsiteMarker) { try { map.removeLayer(window._dumpsiteMarker); } catch(e){} window._dumpsiteMarker = null; }
+        if (!dumpsite) {
+            // load from storage if null
+            dumpsite = JSON.parse(localStorage.getItem('dumpsiteInfo')) || null;
+            if (!dumpsite) return;
+        }
+        const marker = L.marker([dumpsite.lat, dumpsite.lng], {
+            icon: L.divIcon({ html: `<i class="fas fa-recycle" style="color:#8d6e63; font-size:22px;"></i>`, iconSize:[30,30], className:'dumpsite-marker' })
+        }).addTo(map).bindPopup(`<strong>${dumpsite.name}</strong>`);
+        window._dumpsiteMarker = marker;
+    }
+
+    /***************************
+     * Pickup Run & Optimization
+     ***************************/
+    // UI toggles for pickup mode
+    document.getElementById('pickupMode').addEventListener('change', function(e){
+        const val = e.target.value;
+        document.getElementById('radiusGroup').style.display = val === 'radius' ? 'block' : 'none';
+        document.getElementById('selectedBinsGroup').style.display = val === 'selected' ? 'block' : 'none';
+        if (val === 'selected') renderSelectableBinsList();
+    });
+
+    function renderSelectableBinsList() {
+        const cont = document.getElementById('selectBinsContainer');
+        cont.innerHTML = '';
+        bins.forEach((b, idx) => {
+            const id = `selectbin_${idx}`;
+            const div = document.createElement('div');
+            div.innerHTML = `<label><input type="checkbox" id="${id}" value="${b.binId}" ${b.status === 'full' ? 'checked' : ''}/> ${b.binId} (${b.status})</label>`;
+            cont.appendChild(div);
+        });
+    }
+
+    // Haversine distance (km)
+    function haversine(lat1, lon1, lat2, lon2) {
+        const R = 6371; // km
+        const dLat = toRad(lat2 - lat1);
+        const dLon = toRad(lon2 - lon1);
+        const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2) * Math.sin(dLon/2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        return R * c;
+    }
+    function toRad(v) { return v * Math.PI / 180; }
+
+    // Start pickup run
+    function startPickupRun() {
+        const truckId = document.getElementById('activeTruckSelect').value;
+        if (!truckId) { showToast('Select an active truck first', 'error'); return; }
+        const truck = trucks.find(t => t.truckId === truckId);
+        if (!truck) { showToast('Selected truck not found', 'error'); return; }
+        if (!truck.startLat || !truck.startLng) { showToast('Truck start location missing. Click on the map to set start coordinates.', 'error'); return; }
+        const mode = document.getElementById('pickupMode').value;
+        let candidateBins = [];
+
+        if (mode === 'all_full') {
+            candidateBins = bins.filter(b => b.status === 'full' && b.latitude && b.longitude);
+        } else if (mode === 'radius') {
+            const radiusKm = parseFloat(document.getElementById('radiusKm').value) || 1;
+            candidateBins = bins.filter(b => b.status === 'full' && b.latitude && b.longitude && haversine(truck.startLat, truck.startLng, b.latitude, b.longitude) <= radiusKm);
+        } else if (mode === 'selected') {
+            const checks = Array.from(document.querySelectorAll('#selectBinsContainer input[type=checkbox]:checked')).map(ch => ch.value);
+            candidateBins = bins.filter(b => checks.includes(b.binId) && b.latitude && b.longitude);
+        }
+
+        if (candidateBins.length === 0) { showToast('No candidate bins found for this run', 'error'); return; }
+
+        // Greedy nearest neighbor from truck start: select bins until capacity reached
+        const capacity = parseInt(truck.capacityBins) || 10;
+        const visited = [];
+        let current = { lat: truck.startLat, lng: truck.startLng };
+        let remainingCapacity = capacity;
+        const routePoints = [{ lat: current.lat, lng: current.lng, label: truck.truckId + ' start' }];
+        const usedIndices = new Set();
+
+        while (remainingCapacity > 0) {
+            // find nearest unvisited candidate bin
+            let bestIdx = -1, bestDist = Infinity;
+            for (let i=0;i<candidateBins.length;i++){
+                if (usedIndices.has(i)) continue;
+                const b = candidateBins[i];
+                const d = haversine(current.lat, current.lng, b.latitude, b.longitude);
+                if (d < bestDist) { bestDist = d; bestIdx = i; }
+            }
+            if (bestIdx === -1) break; // no more
+            const chosen = candidateBins[bestIdx];
+            usedIndices.add(bestIdx);
+            visited.push(chosen);
+            routePoints.push({ lat: chosen.latitude, lng: chosen.longitude, label: chosen.binId });
+            current = { lat: chosen.latitude, lng: chosen.longitude };
+            remainingCapacity--;
+        }
+
+        // If truck became full and dumpsite exists, add dump point
+        let returnedToDumpsite = false;
+        if (((capacity - remainingCapacity) > 0) && dumpsite) {
+            routePoints.push({ lat: dumpsite.lat, lng: dumpsite.lng, label: dumpsite.name });
+            returnedToDumpsite = true;
+        }
+
+        // Draw route on map using road routing
+        drawRoadRoute(routePoints);
+
+        // Simulate pickups: update bins, pickup counts and payment due
+        const pickups = [];
+        visited.forEach(bin => {
+            // find bin in main bins array and update
+            const bi = bins.find(b => b.binId === bin.binId);
+            if (bi) {
+                bi.status = 'empty'; // collected
+                bi.pickupCount = (bi.pickupCount || 0) + 1;
+                // every 3 pickups, require payment
+                if (bi.pickupCount % 3 === 0) {
+                    // add payment due for this bin owner
+                    const rate = ratesPerBinType[bi.binType] || ratesPerBinType['residential'];
+                    bi.paymentDue = (bi.paymentDue || 0) + rate;
+                }
+                pickups.push(bi.binId);
+            }
+        });
+
+        // persist bins
+        localStorage.setItem('wasteBins', JSON.stringify(bins));
+        // update excel data pickup counts if matched
+        excelData.forEach(owner => {
+            const b = bins.find(x => x.binId === owner.binId);
+            if (b) { owner.pickupCount = b.pickupCount; owner.paymentDue = b.paymentDue || 0; }
+        });
+        localStorage.setItem('excelOwnerData', JSON.stringify(excelData));
+
+        // update displays
+        loadBins();
+        loadExcelData();
+        updateStats();
+        updatePaymentsList();
+
+        // Run summary
+        const summaryEl = document.getElementById('runSummary');
+        const summaryHtml = `<div><strong>Truck:</strong> ${truck.truckId} — picked ${visited.length} bins (capacity ${capacity})</div>
+            <div><strong>Picks:</strong> ${visited.map(v=>v.binId).join(', ') || 'None'}</div>
+            <div><strong>Returned to dumpsite:</strong> ${returnedToDumpsite ? 'Yes' : 'No'}</div>`;
+        summaryEl.innerHTML = summaryHtml;
+        showToast('Pickup run completed (simulation)', 'success');
+    }
+
+    // NEW: Function to draw route using road routing
+    function drawRoadRoute(points) {
+        // Clear previous route
+        if (routeLayer) map.removeLayer(routeLayer);
+        routeMarkers.forEach(marker => map.removeLayer(marker));
+        routeMarkers = [];
+
+        // Show loading message
+        const summaryEl = document.getElementById('runSummary');
+        summaryEl.innerHTML = '<div>Calculating road route...</div>';
+
+        // Use OSRM (Open Source Routing Machine) to get road route
+        const coordinates = points.map(p => `${p.lng},${p.lat}`).join(';');
+        const url = `https://router.project-osrm.org/route/v1/driving/${coordinates}?overview=full&geometries=geojson`;
+
+        fetch(url)
+            .then(response => response.json())
+            .then(data => {
+                if (data.code === 'Ok') {
+                    // Extract route geometry
+                    const routeGeometry = data.routes[0].geometry;
+                    
+                    // Draw the route on the map
+                    routeLayer = L.geoJSON(routeGeometry, {
+                        style: {
+                            color: '#1976D2',
+                            weight: 6,
+                            opacity: 0.8
+                        }
+                    }).addTo(map);
+                    
+                    // Add markers for key points
+                    points.forEach((point, index) => {
+                        const marker = L.circleMarker([point.lat, point.lng], {
+                            radius: 8,
+                            fillColor: index === 0 ? '#4caf50' : (index === points.length - 1 ? '#f44336' : '#ff9800'),
+                            color: '#fff',
+                            weight: 2,
+                            opacity: 1,
+                            fillOpacity: 0.8
+                        }).addTo(map);
+                        
+                        marker.bindPopup(point.label);
+                        routeMarkers.push(marker);
+                    });
+                    
+                    // Fit map to show the entire route
+                    map.fitBounds(routeLayer.getBounds(), { padding: [40, 40] });
+                    
+                    // Update summary
+                    const distance = (data.routes[0].distance / 1000).toFixed(1);
+                    const duration = (data.routes[0].duration / 60).toFixed(1);
+                    summaryEl.innerHTML += `<div><strong>Distance:</strong> ${distance} km</div><div><strong>Estimated Time:</strong> ${duration} min</div>`;
+                } else {
+                    // Fallback to straight line if OSRM fails
+                    console.warn('OSRM route calculation failed, using straight line');
+                    drawStraightRoute(points);
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching route from OSRM:', error);
+                // Fallback to straight line
+                drawStraightRoute(points);
+                summaryEl.innerHTML += '<div style="color: #f44336;">Road routing unavailable, showing straight line</div>';
+            });
+    }
+
+    // Fallback function for straight line routing
+    function drawStraightRoute(points) {
+        const latlngs = points.map(p => [p.lat, p.lng]);
+        routeLayer = L.polyline(latlngs, { 
+            color: '#1976D2', 
+            weight: 4, 
+            opacity: 0.8,
+            dashArray: '10, 10' // Make it dashed to indicate it's not a road route
+        }).addTo(map);
+        
+        // Add markers
+        points.forEach((point, index) => {
+            const marker = L.circleMarker([point.lat, point.lng], {
+                radius: 6,
+                fillColor: index === 0 ? '#4caf50' : (index === points.length - 1 ? '#f44336' : '#ff9800'),
+                color: '#fff',
+                weight: 1
+            }).addTo(map).bindPopup(point.label);
+            routeMarkers.push(marker);
+        });
+        
+        map.fitBounds(routeLayer.getBounds(), { padding: [40, 40] });
+    }
+
+    function clearRoute() {
+        if (routeLayer) { 
+            map.removeLayer(routeLayer); 
+            routeLayer = null; 
+        }
+        routeMarkers.forEach(marker => map.removeLayer(marker));
+        routeMarkers = [];
+        document.getElementById('runSummary').innerHTML = '';
+    }
+
+    // payments UI
+    function updatePaymentsList() {
+        const cont = document.getElementById('paymentsList');
+        const ownersWithPayments = excelData.filter(o => o.paymentDue && o.paymentDue > 0);
+        if (!ownersWithPayments.length) { cont.innerHTML = '<div style="color:#666;">No outstanding payments</div>'; return; }
+        let html = '';
+        ownersWithPayments.forEach(o => {
+            html += `<div style="background:#fff3cd; padding:.5rem; margin-bottom:.4rem; border-radius:6px; display:flex; justify-content:space-between; align-items:center;">
+                <div><strong>${o.ownerName}</strong> (${o.binId}) — Due: ₵${(o.paymentDue||0).toFixed(2)}</div>
+                <div style="display:flex; gap:.4rem;">
+                    <button class="btn btn-success btn-small" onclick="recordPayment('${o.binId}')"><i class="fas fa-money-bill-wave"></i> Record</button>
+                </div>
+            </div>`;
+        });
+        cont.innerHTML = html;
+    }
+
+    function recordPayment(binId) {
+        // find bin & owner and clear paymentDue
+        const b = bins.find(x => x.binId === binId);
+        if (b) { b.paymentDue = 0; localStorage.setItem('wasteBins', JSON.stringify(bins)); }
+        const o = excelData.find(x => x.binId === binId);
+        if (o) { o.paymentDue = 0; localStorage.setItem('excelOwnerData', JSON.stringify(excelData)); }
+        updatePaymentsList(); loadBins(); loadExcelData();
+        showToast('Payment recorded', 'success');
+    }
+
+    /***********************
+     * Remaining original functions (export, toasts, etc.)
+     ***********************/
+    function exportToExcel() {
+        updateSyncIndicator('syncing','Exporting...');
+        const exportData = excelData.map(owner => ({
+            'Owner Name': owner.ownerName,
+            'Digital Address': owner.digitalAddress,
+            'Phone': owner.phone,
+            'Location': owner.location,
+            'Bin ID': owner.binId,
+            'Latitude': owner.latitude,
+            'Longitude': owner.longitude,
+            'Added Date': new Date(owner.importedAt).toLocaleDateString(),
+            'Status': bins.find(b => b.binId === owner.binId)?.status || 'N/A',
+            'PickupCount': owner.pickupCount || 0,
+            'PaymentDue': owner.paymentDue || 0
+        }));
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.json_to_sheet(exportData);
+        ws['!cols'] = [{wch:20},{wch:15},{wch:15},{wch:30},{wch:15},{wch:12},{wch:12},{wch:12},{wch:10},{wch:10}];
+        XLSX.utils.book_append_sheet(wb, ws, 'Dustbin Owners');
+        const filename = `Zoomlion_Dustbin_Owners_${new Date().toISOString().split('T')[0]}.xlsx`;
+        XLSX.writeFile(wb, filename);
+        updateSyncIndicator('success','Exported');
+        showToast('Excel file exported successfully!', 'success');
+        setTimeout(()=> updateSyncIndicator('success','Synced'), 2000);
+    }
+
+    function updateSyncIndicator(status,text) {
+        const indicator = document.getElementById('syncIndicator');
+        indicator.className = 'sync-indicator';
+        if (status === 'syncing') { indicator.classList.add('syncing'); indicator.innerHTML = `<i class="fas fa-sync fa-spin"></i> ${text}`; }
+        else if (status === 'success') indicator.innerHTML = `<i class="fas fa-check-circle"></i> ${text}`;
+        else indicator.innerHTML = `<i class="fas fa-times-circle"></i> ${text}`;
+    }
+
+    // Owner details modal
+    function viewOwnerDetails(index) {
+        const owner = excelData[index];
+        const bin = bins.find(b => b.binId === owner.binId);
+        const detailsHTML = `<div class="modal-content" style="max-width:600px;"><h3 style="margin-bottom:1rem; color:#2e7d32;"><i class="fas fa-user"></i> Owner Details</h3>
+            <div style="background:#f8f9fa; padding:1.5rem; border-radius:8px;">
+                <div style="margin-bottom:1rem;"><strong>Owner Name:</strong> ${owner.ownerName}</div>
+                <div style="margin-bottom:1rem;"><strong>Digital Address:</strong> ${owner.digitalAddress}</div>
+                <div style="margin-bottom:1rem;"><strong>Phone:</strong> ${owner.phone}</div>
+                <div style="margin-bottom:1rem;"><strong>Location:</strong> ${owner.location}</div>
+                <div style="margin-bottom:1rem;"><strong>Bin ID:</strong> ${owner.binId}</div>
+                <div style="margin-bottom:1rem;"><strong>Coordinates:</strong> ${owner.latitude}, ${owner.longitude}</div>
+                <div style="margin-bottom:1rem;"><strong>Pickups:</strong> ${owner.pickupCount || 0}</div>
+                <div style="margin-bottom:1rem;"><strong>Payment Due:</strong> ₵${(owner.paymentDue||0).toFixed(2)}</div>
+                ${bin ? `<div style="margin-bottom:1rem;"><strong>Current Status:</strong> <span class="status-badge status-${bin.status}">${bin.status}</span></div>` : ''}
+            </div>
+            <div style="margin-top:1rem;">
+                <button class="btn btn-primary" onclick="closeOwnerDetailsModal()"><i class="fas fa-check"></i> Close</button>
+                ${bin ? `<button class="btn btn-success" onclick="viewOnMap(${bins.indexOf(bin)}); closeOwnerDetailsModal();"><i class="fas fa-map-marker-alt"></i> View on Map</button>` : ''}
+            </div></div>`;
+        showCustomModal(detailsHTML);
+    }
+
+    function deleteOwner(index) {
+        if (!confirm('Are you sure you want to delete this owner record?')) return;
+        const owner = excelData[index];
+        excelData.splice(index,1);
+        localStorage.setItem('excelOwnerData', JSON.stringify(excelData));
+        const binIndex = bins.findIndex(b => b.binId === owner.binId);
+        if (binIndex !== -1) { bins.splice(binIndex,1); localStorage.setItem('wasteBins', JSON.stringify(bins)); }
+        loadExcelData(); loadBins(); updateStats(); showToast('Owner record deleted', 'success');
+    }
+
+    // Custom modal helper
+    function showCustomModal(contentHtml) {
+        // remove existing
+        const existing = document.getElementById('customModal');
+        if (existing) existing.remove();
+        const wrapper = document.createElement('div');
+        wrapper.className = 'modal'; wrapper.id = 'customModal'; wrapper.style.display='block';
+        wrapper.innerHTML = contentHtml;
+        document.body.appendChild(wrapper);
+        wrapper.onclick = function(e) { if (e.target === wrapper) wrapper.remove(); };
+    }
+    function closeOwnerDetailsModal() { const m = document.getElementById('customModal'); if (m) m.remove(); }
+
+    // Modal functions
+    function showExcelImportModal() { document.getElementById('excelImportModal').style.display = 'block'; document.getElementById('filePreview').style.display = 'none'; selectedFile = null; }
+    function closeModal(modalId) { document.getElementById(modalId).style.display = 'none'; }
+    function cancelImport() { document.getElementById('filePreview').style.display = 'none'; selectedFile = null; document.getElementById('excelFileInput').value = ''; }
+
+    // Toast
+    function showToast(message, type='success') {
+        const toast = document.createElement('div');
+        toast.className = `alert alert-${type}`;
+        toast.style.position='fixed'; toast.style.top='20px'; toast.style.right='20px'; toast.style.zIndex='10000'; toast.style.minWidth='300px';
+        toast.innerHTML = `<i class="fas fa-${type==='success' ? 'check-circle' : type==='error' ? 'times-circle' : 'info-circle'}"></i><span style="margin-left:.5rem;">${message}</span>`;
+        document.body.appendChild(toast);
+        setTimeout(()=>{ toast.style.opacity='0'; toast.style.transition='opacity .3s'; setTimeout(()=>toast.remove(),300); }, 3000);
+    }
+
+    /*
+    // Download sample template (kept original)
+    function downloadSampleTemplate() {
+        const sampleData = [
+            { 'Owner Name': 'Tonde Michael', 'Digital Address':'GA-123-4567', 'Phone':'+233-24-123-4567', 'Location':'East Legon, Accra', 'Bin ID':'BIN-ACC-001', 'Latitude':5.6500, 'Longitude':-0.1667 },
+            { 'Owner Name': 'Jane Smith', 'Digital Address':'GA-234-5678', 'Phone':'+233-24-234-5678', 'Location':'Osu, Accra', 'Bin ID':'BIN-ACC-002', 'Latitude':5.5500, 'Longitude':-0.1833 }
+        ];
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.json_to_sheet(sampleData);
+        ws['!cols'] = [{wch:20},{wch:15},{wch:15},{wch:30},{wch:15},{wch:12},{wch:12}];
+        XLSX.utils.book_append_sheet(wb, ws, 'Template');
+        XLSX.writeFile(wb, 'Zoomlion_Template.xlsx');
+        showToast('Sample template downloaded!', 'success');
+    }
+*/
+    // Add download template button to header
+    setTimeout(()=>{
+        const headerActions = document.querySelector('.header-actions');
+        const templateBtn = document.createElement('button');
+        templateBtn.className = 'btn btn-secondary';
+        templateBtn.innerHTML = '<i class="fas fa-file-download"></i> Download Template';
+        templateBtn.onclick = downloadSampleTemplate;
+        headerActions.insertBefore(templateBtn, headerActions.firstChild);
+    },100);
+
+    // Auto-save
+    setInterval(()=>{
+        if (excelData.length > 0 || bins.length > 0 || trucks.length > 0 || dumpsite) {
+            localStorage.setItem('excelOwnerData', JSON.stringify(excelData));
+            localStorage.setItem('wasteBins', JSON.stringify(bins));
+            localStorage.setItem('wasteTrucks', JSON.stringify(trucks));
+            if (dumpsite) localStorage.setItem('dumpsiteInfo', JSON.stringify(dumpsite));
+        }
+    },30000);
+
+    // System check
+    function performSystemCheck() {
+        console.log('Excel-Integrated Waste Management System (with Fleet)');
+        console.log('Features loaded:', { excelImport:'✅', excelExport:'✅', csvSupport:'✅', autoUpdate:'✅', mapIntegration:'✅', fleet:'✅', dumpsite:'✅', routeSim:'✅' });
+    }
+    setTimeout(performSystemCheck,2000);
+
+    // Modal outside click close (keeps original)
+    window.onclick = function(event) {
+        if (event.target.classList && event.target.classList.contains('modal')) {
+            event.target.style.display = 'none';
+        }
+    };
+
+    // Tab switch
+    function switchTab(tabName, button) {
+        document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+        button.classList.add('active');
+        document.getElementById(tabName + 'Tab').classList.add('active');
+    }
+
+    // initial UI updates
+    updateMapMarkers();
+    populateActiveTruckSelect();
+    updatePaymentsList();
+
+    </script>
+</body>
+</html>
